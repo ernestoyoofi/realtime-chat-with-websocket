@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Realtime chat with websocket</title>
+  <style>
+    @import url('https://fonts.cdnfonts.com/css/google-sans');
+    * {
+      padding: 0;
+      margin: 0;
+      box-sizing: border-box;
+      font-family: 'Product Sans', sans-serif;
+    }
+    .chat-box {
+      width: 100%;
+      max-width: 560px;
+      margin: auto;
+    }
+    .chat-box .chat-input[typeit="true"]::before {
+      content: "Seseorang sedang mengetik...";
+      position: absolute;
+      margin-top: -72px;
+      background: #e0e0e0;
+      padding: 4px 12px;
+      border-radius: 12px 12px 0px 0px;
+      font-size: 10px;
+    }
+    .chat-box .chat-input[typeit="true"] textarea {
+      border-radius: 0px 0px 0px 0px;
+    }
+    .chat-box .chat-message {
+      width: 100%;
+      height: calc(100vh - 50px);
+      overflow-y: scroll;
+      overflow-x: hidden;
+    }
+    .chat-box .chat-input {
+      width: 100%;
+      height: 50px;
+      display: flex;
+      align-items: center;
+    }
+    .chat-box .chat-input textarea {
+      width: calc(100% - 50px);
+      height: 50px;
+      border-radius: 12px 0px 0px 0px;
+      border: 1px solid #d3d3d3;
+      resize: none;
+      outline: none;
+      padding: 12px;
+      transition: .4s;
+    }
+    .chat-box .chat-input textarea:focus {
+      border: 1px solid #0051ff;
+    }
+    .chat-box .chat-input button {
+      width: 50px;
+      height: 50px;
+      background-color: #d3d3d3;
+      border: none;
+      outline: none;
+      cursor: pointer;
+      border-radius: 0px 12px 0px 0px;
+    }
+    .chat-box .chat-user {
+      display: block;
+      padding: 10px 17px;
+      margin: 3px 8px;
+      border-radius: 12px;
+      background-color: #f8f8f8;
+      cursor: pointer;
+    }
+    .chat-box .chat-user .chat-user {
+      margin: 5px 0px;
+    }
+    .chat-box .chat-message .chat-user[isme] {
+      background-color: #d3e1ff;
+    }
+    .chat-box .chat-input .reply-chat {
+      width: 100%;
+      max-width: 560px;
+      position: absolute;
+      margin-top: -200px;
+      display: flex;
+      justify-content: center;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="chat-box">
+    <div class="chat-message"></div>
+    <div class="chat-input" typeit="false" reply="false">
+      <div class="reply-chat" data="{}"></div>
+      <textarea maxlength="200" id="text" placeholder="Ketik pesan disini..."></textarea>
+      <button id="send">Kirim</button>
+    </div>
+  </div>
+  <script>
+    const socket = new WebSocket(location.origin.replace("http://","ws://").replace("https://","ws://"))
+    const refreshPageIfDisconnect = async () => {
+      try {
+        const dataCalled = await fetch("/called")
+        if(dataCalled.ok) {
+          location.reload()
+        } else {
+          refreshPageIfDisconnect()
+        }
+      } catch(err) {
+        setTimeout(() => {
+          refreshPageIfDisconnect()
+        }, 1000)
+      }
+    }
+    const uuidChat = () => {
+      const d = localStorage.getItem("uuid")
+      if(!d) {
+        const newkey = crypto.randomUUID()
+        localStorage.setItem("uuid", newkey)
+        return newkey
+      } else {
+        return d
+      }
+    }
+    const loadReply = (user, time, text) => {
+      const d = document.querySelector(".chat-input .reply-chat")
+      d.innerHTML = `<div class="chat-user" isme="true"><small>${user === uuidChat()? "@You": user} • ${new Date(time).toString().split(" GMT+")[0]}</small><p>${text}</p></div>`
+      d.setAttribute("data", JSON.stringify({
+        user, time, text
+      }))
+      d.addEventListener("click", (e) => {
+        d.innerHTML = ``
+        d.setAttribute("data", "{}")
+      })
+    }
+    socket.onclose = () => {
+      refreshPageIfDisconnect()
+    }
+    socket.onmessage = (e) => {
+      const data = JSON.parse(e.data)
+      console.log(data)
+      if(data.type === "chat.typeing" && data.uuid != uuidChat()) {
+        const bx = document.querySelector('.chat-box .chat-input')
+        bx.setAttribute('typeit', "true")
+        setTimeout(() => {
+          bx.setAttribute('typeit', "false")
+        }, 1000)
+      }
+      if(data.type === "chat.reciver" || data.type === "chat.load") {
+        const elChat = document.querySelector('.chat-box .chat-message')
+        for(let a of data.msg) {
+          const cl = document.createElement("div")
+          if(a.user === uuidChat()) {
+            cl.setAttribute("isme", "1")
+          }
+          cl.className = "chat-user"
+          cl.setAttribute("onclick", `loadReply('${a.user}','${a.time}','${a.text}')`)
+          if(a.reply) {
+            cl.innerHTML += `<div class="chat-user"><small>@${a.user === uuidChat()? "You": a.reply.user} • ${new Date(a.reply.time).toString().split(" GMT+")[0]}</small><p>${a.reply.text.trim()}</p></div><small>@${a.user === uuidChat()? "You": a.user} • ${new Date(a.time).toString().split(" GMT+")[0]}</small><p>${a.text.trim()}</p>`
+          } else {
+            cl.innerHTML = `<small>@${a.user === uuidChat()? "You": a.user} • ${new Date(a.time).toString().split(" GMT+")[0]}</small><p>${a.text.trim()}</p>`
+          }
+          elChat.appendChild(cl)
+        }
+        elChat.scrollTo(0, elChat.scrollHeight)
+      }
+    }
+    const text = document.getElementById("text")
+    const btnsend = document.getElementById("send")
+    text.oninput = () => {
+      socket.send(JSON.stringify({type: "typeit", uuid: uuidChat()}))
+    }
+    btnsend.onclick = () => {
+      if(text.length < 1) {
+        return ;
+      }
+      const rp = document.querySelector(".chat-input .reply-chat")
+      const replyContent = JSON.parse(rp.getAttribute("data"))
+      socket.send(JSON.stringify({
+        type: "send",
+        text: text.value,
+        uuid: uuidChat(),
+        time: new Date(),
+        reply: Object.keys(replyContent)[0]? replyContent : undefined
+      }))
+      text.value = ""
+      rp.setAttribute("data", "{}")
+      rp.innerHTML = ""
+    }
+  </script>
+</body>
+</html>
