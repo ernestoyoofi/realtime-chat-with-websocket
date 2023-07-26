@@ -98,7 +98,7 @@
     </div>
   </div>
   <script>
-    const socket = new WebSocket(location.origin.replace("http://","ws://").replace("https://","ws://"))
+    const socket = new WebSocket(location.origin.replace("http://","ws://").replace("https://","wss://"))
     const refreshPageIfDisconnect = async () => {
       try {
         const dataCalled = await fetch("/called")
@@ -139,7 +139,6 @@
     }
     socket.onmessage = (e) => {
       const data = JSON.parse(e.data)
-      console.log(data)
       if(data.type === "chat.typeing" && data.uuid != uuidChat()) {
         const bx = document.querySelector('.chat-box .chat-input')
         bx.setAttribute('typeit', "true")
